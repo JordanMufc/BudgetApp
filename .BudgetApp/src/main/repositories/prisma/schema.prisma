@@ -1,0 +1,235 @@
+generator client {
+  provider   = "prisma-client-ts"
+  output     = "./generated"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model accounts {
+  id                     Int                      @id @default(autoincrement())
+  user_id                Int
+  name                   String
+  type                   accounts_type            @default(OTHER)
+  currency               String?                  @default("EUR") @db.Char(3)
+  initial_balance        Decimal                  @default(0.00) @db.Decimal(12, 2)
+  is_archived            Boolean                  @default(false)
+  created_at             DateTime                 @default(now()) @db.DateTime(0)
+  updated_at             DateTime                 @default(now()) @db.DateTime(0)
+  users                  users                    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_accounts_user")
+  recurring_transactions recurring_transactions[]
+  saving_goals           saving_goals[]
+  transactions           transactions[]
+
+  @@index([user_id], map: "fk_accounts_user")
+}
+
+model audit_logs {
+  id         Int               @id @default(autoincrement())
+  user_id    Int?
+  entity     String            @db.VarChar(100)
+  entity_id  Int?
+  action     audit_logs_action
+  details    Json?
+  created_at DateTime          @default(now()) @db.DateTime(0)
+  users      users?            @relation(fields: [user_id], references: [id], onUpdate: NoAction, map: "fk_audit_user")
+
+  @@index([user_id], map: "fk_audit_user")
+}
+
+model budget_items {
+  id          Int        @id @default(autoincrement())
+  budget_id   Int
+  category_id Int
+  amount      Decimal    @db.Decimal(12, 2)
+  created_at  DateTime   @default(now()) @db.DateTime(0)
+  updated_at  DateTime   @default(now()) @db.DateTime(0)
+  budgets     budgets    @relation(fields: [budget_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_budget_items_budget")
+  categories  categories @relation(fields: [category_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_budget_items_category")
+
+  @@unique([budget_id, category_id], map: "uq_budget_category")
+  @@index([category_id], map: "fk_budget_items_category")
+}
+
+model budgets {
+  id           Int            @id @default(autoincrement())
+  user_id      Int
+  year         Int
+  month        Int            @db.TinyInt
+  created_at   DateTime       @default(now()) @db.DateTime(0)
+  updated_at   DateTime       @default(now()) @db.DateTime(0)
+  budget_items budget_items[]
+  users        users          @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_budgets_user")
+
+  @@unique([user_id, year, month], map: "uq_budget_user_period")
+}
+
+model categories {
+  id                     Int                      @id @default(autoincrement())
+  user_id                Int
+  name                   String
+  kind                   categories_kind
+  parent_id              Int?
+  created_at             DateTime                 @default(now()) @db.DateTime(0)
+  updated_at             DateTime                 @default(now()) @db.DateTime(0)
+  budget_items           budget_items[]
+  categories             categories?              @relation("categoriesTocategories", fields: [parent_id], references: [id], onUpdate: NoAction, map: "fk_categories_parent")
+  other_categories       categories[]             @relation("categoriesTocategories")
+  users                  users                    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_categories_user")
+  recurring_transactions recurring_transactions[]
+  transactions           transactions[]
+
+  @@index([parent_id], map: "fk_categories_parent")
+  @@index([user_id, kind], map: "idx_categories_user_kind")
+}
+
+model notifications {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  message    String   @db.VarChar(255)
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now()) @db.DateTime(0)
+  users      users    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_notifications_user")
+
+  @@index([user_id], map: "fk_notifications_user")
+}
+
+model recurring_transactions {
+  id          Int                              @id @default(autoincrement())
+  user_id     Int
+  account_id  Int
+  category_id Int?
+  type        recurring_transactions_type
+  amount      Decimal                          @db.Decimal(12, 2)
+  frequency   recurring_transactions_frequency
+  next_run_at DateTime                         @db.DateTime(0)
+  description String?                          @db.VarChar(255)
+  created_at  DateTime                         @default(now()) @db.DateTime(0)
+  updated_at  DateTime                         @default(now()) @db.DateTime(0)
+  accounts    accounts                         @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_recurring_account")
+  categories  categories?                      @relation(fields: [category_id], references: [id], onUpdate: NoAction, map: "fk_recurring_category")
+  users       users                            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_recurring_user")
+
+  @@index([account_id], map: "fk_recurring_account")
+  @@index([category_id], map: "fk_recurring_category")
+  @@index([user_id], map: "fk_recurring_user")
+}
+
+model saving_goal_contributions {
+  id             Int           @id @default(autoincrement())
+  saving_goal_id Int
+  transaction_id Int?
+  amount         Decimal       @db.Decimal(12, 2)
+  contributed_at DateTime      @default(now()) @db.DateTime(0)
+  saving_goals   saving_goals  @relation(fields: [saving_goal_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_sgc_goal")
+  transactions   transactions? @relation(fields: [transaction_id], references: [id], onUpdate: NoAction, map: "fk_sgc_txn")
+
+  @@index([saving_goal_id], map: "fk_sgc_goal")
+  @@index([transaction_id], map: "fk_sgc_txn")
+}
+
+model saving_goals {
+  id                        Int                         @id @default(autoincrement())
+  user_id                   Int
+  account_id                Int?
+  name                      String
+  target_amount             Decimal                     @db.Decimal(12, 2)
+  target_date               DateTime?                   @db.Date
+  created_at                DateTime                    @default(now()) @db.DateTime(0)
+  updated_at                DateTime                    @default(now()) @db.DateTime(0)
+  saving_goal_contributions saving_goal_contributions[]
+  accounts                  accounts?                   @relation(fields: [account_id], references: [id], onUpdate: NoAction, map: "fk_saving_goals_account")
+  users                     users                       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_saving_goals_user")
+
+  @@index([account_id], map: "fk_saving_goals_account")
+  @@index([user_id], map: "fk_saving_goals_user")
+}
+
+model transactions {
+  id                        Int                         @id @default(autoincrement())
+  user_id                   Int
+  account_id                Int
+  category_id               Int?
+  type                      transactions_type
+  amount                    Decimal                     @db.Decimal(12, 2)
+  txn_date                  DateTime                    @db.Date
+  description               String?                     @db.VarChar(255)
+  linked_txn_id             Int?
+  created_at                DateTime                    @default(now()) @db.DateTime(0)
+  updated_at                DateTime                    @default(now()) @db.DateTime(0)
+  saving_goal_contributions saving_goal_contributions[]
+  accounts                  accounts                    @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_transactions_account")
+  categories                categories?                 @relation(fields: [category_id], references: [id], onUpdate: NoAction, map: "fk_transactions_category")
+  transactions              transactions?               @relation("transactionsTotransactions", fields: [linked_txn_id], references: [id], onUpdate: NoAction, map: "fk_transactions_linked")
+  other_transactions        transactions[]              @relation("transactionsTotransactions")
+  users                     users                       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_transactions_user")
+
+  @@index([account_id], map: "fk_transactions_account")
+  @@index([category_id], map: "fk_transactions_category")
+  @@index([linked_txn_id], map: "fk_transactions_linked")
+  @@index([user_id, account_id], map: "idx_transactions_user_account")
+  @@index([user_id, txn_date], map: "idx_transactions_user_date")
+}
+
+model users {
+  id                     Int                      @id @default(autoincrement())
+  email                  String                   @unique(map: "email")
+  password_hash          String                   @db.VarChar(255)
+  full_name              String?
+  default_currency       String?                  @default("EUR") @db.Char(3)
+  role                   users_role?              @default(USER)
+  created_at             DateTime                 @default(now()) @db.DateTime(0)
+  updated_at             DateTime                 @default(now()) @db.DateTime(0)
+  accounts               accounts[]
+  audit_logs             audit_logs[]
+  budgets                budgets[]
+  categories             categories[]
+  notifications          notifications[]
+  recurring_transactions recurring_transactions[]
+  saving_goals           saving_goals[]
+  transactions           transactions[]
+}
+
+enum accounts_type {
+  BANK
+  CASH
+  SAVINGS
+  OTHER
+}
+
+enum categories_kind {
+  EXPENSE
+  INCOME
+}
+
+enum transactions_type {
+  EXPENSE
+  INCOME
+}
+
+enum recurring_transactions_type {
+  EXPENSE
+  INCOME
+}
+
+enum audit_logs_action {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+}
+
+enum users_role {
+  USER
+  ADMIN
+}
+
+enum recurring_transactions_frequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
