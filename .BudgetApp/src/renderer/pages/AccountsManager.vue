@@ -55,35 +55,121 @@
           <p v-if="formSuccess" class="form-success">{{ formSuccess }}</p>
         </form>
 
-        <div class="accounts-list">
-          <header>
-            <h3>Mes comptes ({{ accounts.length }})</h3>
-            <button class="refresh" type="button" :disabled="isFetching" @click="refresh">
-              {{ isFetching ? "Actualisation..." : "Actualiser" }}
-            </button>
-          </header>
-          <p v-if="lastError" class="list-error">{{ lastError }}</p>
-          <p v-else-if="!accounts.length && !isFetching" class="empty">
-            Aucun compte pour le moment. Créez votre premier compte pour démarrer.
-          </p>
-          <ul class="cards">
-            <li v-for="account in accounts" :key="account.id" class="account-card">
-              <div class="card-header">
-                <div>
-                  <p class="account-name">{{ account.name }}</p>
-                  <p class="account-type">{{ typeLabel(account.type) }}</p>
+        <div class="accounts-right">
+          <div class="accounts-list">
+            <header>
+              <h3>Mes comptes ({{ accounts.length }})</h3>
+              <button class="refresh" type="button" :disabled="isFetching" @click="refresh">
+                {{ isFetching ? "Actualisation..." : "Actualiser" }}
+              </button>
+            </header>
+            <p v-if="lastError" class="list-error">{{ lastError }}</p>
+            <p v-else-if="!accounts.length && !isFetching" class="empty">
+              Aucun compte pour le moment. Créez votre premier compte pour démarrer.
+            </p>
+            <ul class="cards">
+              <li
+                v-for="account in accounts"
+                :key="account.id"
+                class="account-card"
+                :class="{ selected: account.id === selectedAccountId }"
+                tabindex="0"
+                @click="selectAccount(account.id)"
+                @keydown.enter.prevent="selectAccount(account.id)"
+                @keydown.space.prevent="selectAccount(account.id)"
+              >
+                <div class="card-header">
+                  <div>
+                    <p class="account-name">{{ account.name }}</p>
+                    <p class="account-type">{{ typeLabel(account.type) }}</p>
+                  </div>
+                  <span class="badge">{{ account.currency }}</span>
                 </div>
-                <span class="badge">{{ account.currency }}</span>
+                <p class="balance">
+                  {{ formatNumber(account.initialBalance) }} {{ account.currency }}
+                </p>
+                <p class="meta">
+                  Créé le {{ formatDate(account.createdAt) }}
+                  <span v-if="account.isArchived" class="archived">Archivé</span>
+                </p>
+              </li>
+            </ul>
+          </div>
+
+          <section class="transactions-panel" v-if="selectedAccount">
+            <header>
+              <div>
+                <p class="eyebrow">Transactions</p>
+                <h3>{{ selectedAccount.name }}</h3>
+                <p class="description">Ajoutez des dépenses ou revenus pour ce compte.</p>
               </div>
-              <p class="balance">
-                {{ formatNumber(account.initialBalance) }} {{ account.currency }}
+              <span class="badge">{{ selectedAccount.currency }}</span>
+            </header>
+
+            <form class="transaction-form" @submit.prevent="handleTransactionSubmit">
+              <label>
+                Type
+                <select v-model="transactionForm.type">
+                  <option value="EXPENSE">Dépense</option>
+                  <option value="INCOME">Revenu</option>
+                </select>
+              </label>
+              <label>
+                Montant
+                <input
+                  v-model.number="transactionForm.amount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                />
+              </label>
+              <label>
+                Date
+                <input v-model="transactionForm.txnDate" type="date" required />
+              </label>
+              <label>
+                Description
+                <input v-model="transactionForm.description" type="text" placeholder="Note facultative" />
+              </label>
+              <button type="submit" :disabled="transactionsCreating">
+                {{ transactionsCreating ? "Ajout..." : "Ajouter la transaction" }}
+              </button>
+              <p v-if="transactionError" class="form-error">{{ transactionError }}</p>
+              <p v-if="transactionSuccess" class="form-success">{{ transactionSuccess }}</p>
+            </form>
+
+            <div class="transactions-list">
+              <header>
+                <h4>Historique récent</h4>
+                <span v-if="transactionsLoading">Chargement...</span>
+              </header>
+              <p v-if="transactionsError" class="list-error">{{ transactionsError }}</p>
+              <p v-else-if="!transactions.length && !transactionsLoading" class="empty">
+                Aucune transaction pour l'instant.
               </p>
-              <p class="meta">
-                Créé le {{ formatDate(account.createdAt) }}
-                <span v-if="account.isArchived" class="archived">Archivé</span>
-              </p>
-            </li>
-          </ul>
+              <ul class="transaction-cards">
+                <li v-for="transaction in transactions" :key="transaction.id">
+                  <div class="transaction-row">
+                    <span class="txn-type" :class="transaction.type.toLowerCase()">
+                      {{ typeTransactionLabel(transaction.type) }}
+                    </span>
+                    <span class="txn-amount" :class="transaction.type.toLowerCase()">
+                      {{ formatAmount(transaction.amount, selectedAccount.currency, transaction.type) }}
+                    </span>
+                  </div>
+                  <p class="txn-meta">
+                    {{ formatTransactionDate(transaction.txnDate) }}
+                    <span v-if="transaction.description">• {{ transaction.description }}</span>
+                  </p>
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section v-else class="transactions-panel placeholder">
+            <p>Sélectionnez un compte pour consulter et ajouter des transactions.</p>
+          </section>
         </div>
       </div>
     </div>
@@ -94,11 +180,21 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import { ACCOUNT_TYPES, type AccountType } from "src/shared/account";
+import type { TransactionType } from "src/shared/transaction";
 import { useAuth } from "../composables/auth";
 import { useAccounts } from "../composables/accounts";
+import { useTransactions } from "../composables/transactions";
 
 const { currentUser } = useAuth();
 const { accounts, isFetching, isCreating, lastError, fetchAccounts, createAccount } = useAccounts();
+const {
+  transactions,
+  isLoading: transactionsLoading,
+  isCreating: transactionsCreating,
+  lastError: transactionsError,
+  fetchTransactions,
+  createTransaction,
+} = useTransactions();
 
 const accountTypes = ACCOUNT_TYPES;
 
@@ -111,8 +207,21 @@ const form = reactive({
 
 const formError = ref<string | null>(null);
 const formSuccess = ref<string | null>(null);
+const transactionError = ref<string | null>(null);
+const transactionSuccess = ref<string | null>(null);
 
 const sanitizedCurrency = computed(() => form.currency.trim().toUpperCase().slice(0, 3));
+const selectedAccountId = ref<number | null>(null);
+const selectedAccount = computed(() =>
+  accounts.value.find((account) => account.id === selectedAccountId.value),
+);
+
+const transactionForm = reactive({
+  type: "EXPENSE" as TransactionType,
+  amount: 0,
+  txnDate: new Date().toISOString().split("T")[0],
+  description: "",
+});
 
 const loadAccounts = async () => {
   if (!currentUser.value) {
@@ -131,6 +240,21 @@ onMounted(() => {
 });
 
 watch(
+  accounts,
+  (list) => {
+    if (!list.length) {
+      selectedAccountId.value = null;
+      return;
+    }
+
+    if (!selectedAccountId.value || !list.some((account) => account.id === selectedAccountId.value)) {
+      selectedAccountId.value = list[0].id;
+    }
+  },
+  { immediate: true },
+);
+
+watch(
   () => currentUser.value?.id,
   async (newId, oldId) => {
     if (newId && newId !== oldId) {
@@ -142,11 +266,30 @@ watch(
   },
 );
 
+watch(
+  [selectedAccountId, () => currentUser.value?.id],
+  async ([accountId, userId]) => {
+    if (accountId && userId) {
+      await fetchTransactions(userId, accountId);
+    } else {
+      transactions.value = [];
+    }
+  },
+  { immediate: true },
+);
+
 const resetForm = () => {
   form.name = "";
   form.type = accountTypes[0];
   form.currency = currentUser.value?.defaultCurrency ?? "EUR";
   form.initialBalance = 0;
+};
+
+const resetTransactionForm = () => {
+  transactionForm.type = "EXPENSE";
+  transactionForm.amount = 0;
+  transactionForm.txnDate = new Date().toISOString().split("T")[0];
+  transactionForm.description = "";
 };
 
 const handleSubmit = async () => {
@@ -183,6 +326,48 @@ const refresh = async () => {
   await loadAccounts();
 };
 
+const selectAccount = (accountId: number) => {
+  selectedAccountId.value = accountId;
+  transactionError.value = null;
+  transactionSuccess.value = null;
+};
+
+const handleTransactionSubmit = async () => {
+  if (!currentUser.value || !selectedAccount.value) {
+    transactionError.value = "Sélectionnez un compte avant d'ajouter une transaction.";
+    return;
+  }
+
+  transactionError.value = null;
+  transactionSuccess.value = null;
+  const previousAccountId = selectedAccountId.value;
+
+  try {
+    await createTransaction({
+      userId: currentUser.value.id,
+      accountId: selectedAccount.value.id,
+      type: transactionForm.type,
+      amount: transactionForm.amount,
+      txnDate: transactionForm.txnDate,
+      description: transactionForm.description || undefined,
+    });
+
+    transactionSuccess.value = "Transaction ajoutée avec succès.";
+    resetTransactionForm();
+
+    await fetchAccounts(currentUser.value.id);
+    if (previousAccountId) {
+      selectedAccountId.value = previousAccountId;
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      transactionError.value = error.message;
+    } else {
+      transactionError.value = "Ajout impossible pour le moment.";
+    }
+  }
+};
+
 const formatNumber = (value: number) => {
   return new Intl.NumberFormat("fr-FR", {
     minimumFractionDigits: 2,
@@ -209,6 +394,24 @@ const typeLabel = (type: AccountType) => {
     default:
       return "Autre";
   }
+};
+
+const typeTransactionLabel = (type: TransactionType) => {
+  return type === "EXPENSE" ? "Dépense" : "Revenu";
+};
+
+const formatAmount = (amount: number, currency: string, type: TransactionType) => {
+  const formatted = formatNumber(amount);
+  const sign = type === "EXPENSE" ? "-" : "+";
+  return `${sign}${formatted} ${currency}`;
+};
+
+const formatTransactionDate = (value: string) => {
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 };
 </script>
 
@@ -348,6 +551,12 @@ button:disabled {
   font-size: 0.85rem;
 }
 
+.accounts-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
 .accounts-list {
   background: rgba(15, 23, 42, 0.5);
   border: 1px solid rgba(148, 163, 184, 0.2);
@@ -393,6 +602,14 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.account-card.selected {
+  border-color: rgba(56, 189, 248, 0.8);
+  background: rgba(56, 189, 248, 0.12);
 }
 
 .card-header {
@@ -432,6 +649,115 @@ button:disabled {
 .archived {
   margin-left: 0.5rem;
   color: #fbbf24;
+}
+
+.transactions-panel {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 24px;
+  padding: 1.5rem;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.transactions-panel.placeholder {
+  align-items: center;
+  justify-content: center;
+  color: rgba(226, 232, 240, 0.7);
+  min-height: 200px;
+}
+
+.transaction-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.85rem;
+}
+
+.transactions-list header,
+.transactions-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.transaction-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: #cbd5f5;
+}
+
+.transaction-form input,
+.transaction-form select {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.4);
+  padding: 0.6rem 0.75rem;
+  color: #f8fafc;
+}
+
+.transactions-list {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.transaction-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.transaction-cards li {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  padding: 0.85rem 1rem;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.transaction-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.txn-type {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.txn-type.expense {
+  color: #f87171;
+}
+
+.txn-type.income {
+  color: #4ade80;
+}
+
+.txn-amount {
+  font-weight: 600;
+}
+
+.txn-amount.expense {
+  color: #f87171;
+}
+
+.txn-amount.income {
+  color: #4ade80;
+}
+
+.txn-meta {
+  font-size: 0.85rem;
+  color: rgba(226, 232, 240, 0.75);
+  margin-top: 0.35rem;
 }
 
 @media (max-width: 960px) {

@@ -2,6 +2,7 @@ import { contextBridge } from "electron";
 import { budgetService } from "./budgetService";
 import { authService } from "./authService";
 import { accountService } from "./accountService";
+import { transactionService } from "./transactionService";
 import IElectronService from "src/shared/interfaces/IElectronService";
 
 contextBridge.exposeInMainWorld(
@@ -10,5 +11,6 @@ contextBridge.exposeInMainWorld(
     budgets: budgetService(),
     auth: authService(),
     accounts: accountService(),
+    transactions: transactionService(),
   } as IElectronService,
 );
