@@ -5,7 +5,7 @@
         <h1>BudgetApp</h1>
         <p>Gestion de budget personnelle</p>
       </div>
-      <nav class="app-nav">
+      <nav v-if="currentUser" class="app-nav">
         <RouterLink to="/dashboard">Tableau de bord</RouterLink>
         <RouterLink to="/accounts">Comptes</RouterLink>
         <RouterLink to="/budgets">Budgets</RouterLink>
@@ -15,7 +15,6 @@
         <span class="user-name">{{ currentUser.fullName ?? currentUser.email }}</span>
         <button class="logout" type="button" @click="handleLogout">Déconnexion</button>
       </div>
-      <RouterLink v-else class="login-link" to="/">Connexion</RouterLink>
     </header>
     <main class="app-content">
       <RouterView />

@@ -57,11 +57,6 @@
         </form>
       </div>
       <p v-if="registerSuccess" class="success-banner">{{ registerSuccess }}</p>
-      <p class="demo-hint">
-    <RouterLink to="/dashboard">
-      Explorer le tableau de bord (mode démonstration)
-    </RouterLink>
-      </p>
     </section>
   </div>
 </template>
@@ -350,14 +345,4 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.demo-hint {
-  margin-top: 1.5rem;
-  text-align: center;
-  color: #94a3b8;
-}
-
-.demo-hint a {
-  color: #38bdf8;
-  font-weight: 600;
-}
 </style>
