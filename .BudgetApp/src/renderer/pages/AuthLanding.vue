@@ -58,9 +58,9 @@
       </div>
       <p v-if="registerSuccess" class="success-banner">{{ registerSuccess }}</p>
       <p class="demo-hint">
-        <RouterLink to="/budgets">
-          Explorer le tableau de bord (mode démonstration)
-        </RouterLink>
+    <RouterLink to="/dashboard">
+      Explorer le tableau de bord (mode démonstration)
+    </RouterLink>
       </p>
     </section>
   </div>
@@ -81,7 +81,7 @@ interface RegisterForm {
 interface LoginForm extends LoginCredentials {}
 
 const router = useRouter();
-const { setUser } = useAuth();
+const { setUser, currentUser } = useAuth();
 
 const registerForm = reactive<RegisterForm>({
   name: "",
@@ -107,6 +107,16 @@ watch(showRegister, (visible) => {
     registerSuccess.value = null;
   }
 });
+
+watch(
+  () => currentUser.value,
+  (user) => {
+    if (user) {
+      void router.replace("/dashboard");
+    }
+  },
+  { immediate: true },
+);
 
 const openRegister = () => {
   showRegister.value = true;
@@ -171,7 +181,7 @@ const handleLogin = async () => {
     });
 
     setUser(user);
-    await router.push("/accounts");
+    await router.push("/dashboard");
   } catch (error) {
     loginError.value = getErrorMessage(error, "Impossible de se connecter.");
   } finally {

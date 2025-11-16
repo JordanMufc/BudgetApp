@@ -115,6 +115,27 @@
                 </select>
               </label>
               <label>
+                Catégorie
+                <select v-model="transactionForm.categoryId">
+                  <option :value="null">Aucune catégorie</option>
+                  <option
+                    v-for="category in transactionCategoryOptions"
+                    :key="category.id"
+                    :value="category.id"
+                  >
+                    {{ category.name }}
+                  </option>
+                </select>
+                <span v-if="categoriesError" class="category-hint error">{{ categoriesError }}</span>
+                <span
+                  v-else-if="noCategoryAvailable"
+                  class="category-hint"
+                >
+                  Aucune catégorie disponible pour ce type. Créez-les depuis la page
+                  <RouterLink to="/categories">Catégories</RouterLink>.
+                </span>
+              </label>
+              <label>
                 Montant
                 <input
                   v-model.number="transactionForm.amount"
@@ -184,6 +205,7 @@ import type { TransactionType } from "src/shared/transaction";
 import { useAuth } from "../composables/auth";
 import { useAccounts } from "../composables/accounts";
 import { useTransactions } from "../composables/transactions";
+import { useCategories } from "../composables/categories";
 
 const { currentUser } = useAuth();
 const { accounts, isFetching, isCreating, lastError, fetchAccounts, createAccount } = useAccounts();
@@ -195,6 +217,12 @@ const {
   fetchTransactions,
   createTransaction,
 } = useTransactions();
+const {
+  categories: categoryList,
+  isFetching: categoriesLoading,
+  lastError: categoriesError,
+  fetchCategories,
+} = useCategories();
 
 const accountTypes = ACCOUNT_TYPES;
 
@@ -221,14 +249,33 @@ const transactionForm = reactive({
   amount: 0,
   txnDate: new Date().toISOString().split("T")[0],
   description: "",
+  categoryId: null as number | null,
 });
+
+const transactionCategoryOptions = computed(() =>
+  categoryList.value.filter((category) => category.kind === transactionForm.type),
+);
+
+const noCategoryAvailable = computed(
+  () => !categoriesLoading.value && !transactionCategoryOptions.value.length,
+);
 
 const loadAccounts = async () => {
   if (!currentUser.value) {
+    accounts.value = [];
     return;
   }
 
   await fetchAccounts(currentUser.value.id);
+};
+
+const loadCategories = async () => {
+  if (!currentUser.value) {
+    categoryList.value = [];
+    return;
+  }
+
+  await fetchCategories(currentUser.value.id);
 };
 
 onMounted(() => {
@@ -236,7 +283,7 @@ onMounted(() => {
     form.currency = currentUser.value.defaultCurrency;
   }
 
-  void loadAccounts();
+  void Promise.all([loadAccounts(), loadCategories()]);
 });
 
 watch(
@@ -247,8 +294,9 @@ watch(
       return;
     }
 
-    if (!selectedAccountId.value || !list.some((account) => account.id === selectedAccountId.value)) {
-      selectedAccountId.value = list[0].id;
+    const selectionStillValid = list.some((account) => account.id === selectedAccountId.value);
+    if (!selectionStillValid) {
+      selectedAccountId.value = null;
     }
   },
   { immediate: true },
@@ -257,11 +305,19 @@ watch(
 watch(
   () => currentUser.value?.id,
   async (newId, oldId) => {
-    if (newId && newId !== oldId) {
+    if (!newId) {
+      accounts.value = [];
+      categoryList.value = [];
+      selectedAccountId.value = null;
+      transactions.value = [];
+      return;
+    }
+
+    if (newId !== oldId) {
       if (currentUser.value?.defaultCurrency) {
         form.currency = currentUser.value.defaultCurrency;
       }
-      await loadAccounts();
+      await Promise.all([loadAccounts(), loadCategories()]);
     }
   },
 );
@@ -290,7 +346,22 @@ const resetTransactionForm = () => {
   transactionForm.amount = 0;
   transactionForm.txnDate = new Date().toISOString().split("T")[0];
   transactionForm.description = "";
+  transactionForm.categoryId = null;
 };
+
+watch(
+  () => transactionForm.type,
+  () => {
+    if (
+      transactionForm.categoryId &&
+      !transactionCategoryOptions.value.some(
+        (category) => category.id === transactionForm.categoryId,
+      )
+    ) {
+      transactionForm.categoryId = null;
+    }
+  },
+);
 
 const handleSubmit = async () => {
   if (!currentUser.value) {
@@ -323,7 +394,7 @@ const handleSubmit = async () => {
 };
 
 const refresh = async () => {
-  await loadAccounts();
+  await Promise.all([loadAccounts(), loadCategories()]);
 };
 
 const selectAccount = (accountId: number) => {
@@ -347,6 +418,7 @@ const handleTransactionSubmit = async () => {
       userId: currentUser.value.id,
       accountId: selectedAccount.value.id,
       type: transactionForm.type,
+      categoryId: transactionForm.categoryId ?? undefined,
       amount: transactionForm.amount,
       txnDate: transactionForm.txnDate,
       description: transactionForm.description || undefined,
@@ -697,6 +769,21 @@ button:disabled {
   background: rgba(15, 23, 42, 0.4);
   padding: 0.6rem 0.75rem;
   color: #f8fafc;
+}
+
+.category-hint {
+  font-size: 0.8rem;
+  color: rgba(226, 232, 240, 0.7);
+  margin-top: 0.2rem;
+}
+
+.category-hint a {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+.category-hint.error {
+  color: #f87171;
 }
 
 .transactions-list {

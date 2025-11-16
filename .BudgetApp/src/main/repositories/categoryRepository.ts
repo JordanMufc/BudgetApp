@@ -1,0 +1,52 @@
+import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { PrismaClient, categories } from "./prisma/generated/client";
+import type { Category, CreateCategoryInput } from "src/shared/category";
+
+export class CategoryRepository {
+  private dbclient: PrismaClient;
+
+  constructor() {
+    const databaseUrl = process.env.DATABASE_URL;
+
+    if (!databaseUrl) {
+      throw new Error("DATABASE_URL is not defined");
+    }
+
+    const adapter = new PrismaMariaDb(databaseUrl);
+    this.dbclient = new PrismaClient({ adapter });
+  }
+
+  async listByUser(userId: number): Promise<Category[]> {
+    const rows = await this.dbclient.categories.findMany({
+      where: { user_id: userId },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+    });
+
+    return rows.map((row) => this.mapCategory(row));
+  }
+
+  async create(payload: CreateCategoryInput): Promise<Category> {
+    const category = await this.dbclient.categories.create({
+      data: {
+        user_id: payload.userId,
+        name: payload.name,
+        kind: payload.kind,
+        parent_id: payload.parentId ?? null,
+      },
+    });
+
+    return this.mapCategory(category);
+  }
+
+  private mapCategory(record: categories): Category {
+    return {
+      id: record.id,
+      userId: record.user_id,
+      name: record.name,
+      kind: record.kind as Category["kind"],
+      parentId: record.parent_id,
+      createdAt: record.created_at.toISOString(),
+      updatedAt: record.updated_at.toISOString(),
+    };
+  }
+}

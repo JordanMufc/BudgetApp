@@ -6,8 +6,10 @@
         <p>Gestion de budget personnelle</p>
       </div>
       <nav class="app-nav">
+        <RouterLink to="/dashboard">Tableau de bord</RouterLink>
         <RouterLink to="/accounts">Comptes</RouterLink>
         <RouterLink to="/budgets">Budgets</RouterLink>
+        <RouterLink to="/categories">Catégories</RouterLink>
       </nav>
       <div class="user-badge" v-if="currentUser">
         <span class="user-name">{{ currentUser.fullName ?? currentUser.email }}</span>
