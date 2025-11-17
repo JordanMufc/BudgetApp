@@ -17,4 +17,12 @@ export interface CreateCategoryInput {
   parentId?: number | null;
 }
 
+export interface UpdateCategoryInput {
+  id: number;
+  userId: number;
+  name?: string;
+  kind?: CategoryKind;
+  parentId?: number | null;
+}
+
 export const CATEGORY_KINDS: CategoryKind[] = ["EXPENSE", "INCOME"];

@@ -1,6 +1,9 @@
 import { ipcMain } from "electron";
 import { TransactionRepository } from "./transactionRepository";
-import type { CreateTransactionInput } from "src/shared/transaction";
+import type {
+  CreateTransactionInput,
+  UpdateTransactionInput,
+} from "src/shared/transaction";
 
 let repositoryInstance: TransactionRepository | null = null;
 
@@ -23,5 +26,17 @@ export function registerTransactionRepository() {
     "transactionRepository:create",
     (_event, payload: CreateTransactionInput) =>
       getRepository().create(payload),
+  );
+
+  ipcMain.handle(
+    "transactionRepository:update",
+    (_event, payload: UpdateTransactionInput) =>
+      getRepository().update(payload),
+  );
+
+  ipcMain.handle(
+    "transactionRepository:delete",
+    (_event, transactionId: number) =>
+      getRepository().delete(transactionId),
   );
 }

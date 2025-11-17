@@ -21,4 +21,14 @@ export interface CreateAccountInput {
   isArchived?: boolean;
 }
 
+export interface UpdateAccountInput {
+  id: number;
+  userId: number;
+  name?: string;
+  type?: AccountType;
+  currency?: string;
+  initialBalance?: number;
+  isArchived?: boolean;
+}
+
 export const ACCOUNT_TYPES: AccountType[] = ["BANK", "CASH", "SAVINGS", "OTHER"];

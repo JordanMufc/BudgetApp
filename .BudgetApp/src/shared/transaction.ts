@@ -22,3 +22,14 @@ export interface CreateTransactionInput {
   txnDate: string;
   description?: string;
 }
+
+export interface UpdateTransactionInput {
+  id: number;
+  userId: number;
+  accountId: number;
+  categoryId?: number | null;
+  type?: TransactionType;
+  amount?: number;
+  txnDate?: string;
+  description?: string | null;
+}

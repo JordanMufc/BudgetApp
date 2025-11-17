@@ -1,9 +1,16 @@
-import type { Budget, BudgetItem } from "src/shared/budget";
+import type {
+  Budget,
+  BudgetItem,
+  UpdateBudgetInput,
+  UpdateBudgetItemInput,
+} from "src/shared/budget";
 import { ref } from "vue";
 
 const budgets = ref<Budget[]>([]);
 const isLoading = ref(false);
 const lastError = ref<string | null>(null);
+const mutatingBudgetId = ref<number | null>(null);
+const mutatingBudgetItemId = ref<number | null>(null);
 
 export function useBudgets() {
   const fetchBudgets = async () => {
@@ -29,6 +36,101 @@ export function useBudgets() {
     await fetchBudgets();
   };
 
+  const updateBudget = async (payload: UpdateBudgetInput) => {
+    try {
+      mutatingBudgetId.value = payload.id;
+      await window.electronService.budgets.updateBudget(payload);
+      budgets.value = budgets.value.map((budget) =>
+        budget.id === payload.id
+          ? {
+              ...budget,
+              year: payload.year ?? budget.year,
+              month: payload.month ?? budget.month,
+            }
+          : budget,
+      );
+      lastError.value = null;
+    } catch (error) {
+      console.error("Unable to update budget", error);
+      lastError.value = "Impossible de mettre à jour le budget.";
+      throw error;
+    } finally {
+      mutatingBudgetId.value = null;
+    }
+  };
+
+  const deleteBudget = async (budgetId: number) => {
+    try {
+      mutatingBudgetId.value = budgetId;
+      await window.electronService.budgets.deleteBudget(budgetId);
+      budgets.value = budgets.value.filter((budget) => budget.id !== budgetId);
+      lastError.value = null;
+    } catch (error) {
+      console.error("Unable to delete budget", error);
+      lastError.value = "Impossible de supprimer le budget.";
+      throw error;
+    } finally {
+      mutatingBudgetId.value = null;
+    }
+  };
+
+  const updateBudgetItem = async (
+    payload: UpdateBudgetItemInput,
+  ): Promise<void> => {
+    try {
+      mutatingBudgetItemId.value = payload.id;
+      await window.electronService.budgets.updateBudgetItem(payload);
+      budgets.value = budgets.value.map((budget) =>
+        budget.id === payload.budgetId
+          ? {
+              ...budget,
+              items: budget.items.map((item) =>
+                item.id === payload.id
+                  ? {
+                      ...item,
+                      categoryId: payload.categoryId,
+                      amount: payload.amount,
+                    }
+                  : item,
+              ),
+            }
+          : budget,
+      );
+      lastError.value = null;
+    } catch (error) {
+      console.error("Unable to update budget item", error);
+      lastError.value = "Impossible de mettre à jour la ligne.";
+      throw error;
+    } finally {
+      mutatingBudgetItemId.value = null;
+    }
+  };
+
+  const deleteBudgetItem = async (payload: {
+    id: number;
+    budgetId: number;
+  }) => {
+    try {
+      mutatingBudgetItemId.value = payload.id;
+      await window.electronService.budgets.deleteBudgetItem(payload.id);
+      budgets.value = budgets.value.map((budget) =>
+        budget.id === payload.budgetId
+          ? {
+              ...budget,
+              items: budget.items.filter((item) => item.id !== payload.id),
+            }
+          : budget,
+      );
+      lastError.value = null;
+    } catch (error) {
+      console.error("Unable to delete budget item", error);
+      lastError.value = "Impossible de supprimer la ligne.";
+      throw error;
+    } finally {
+      mutatingBudgetItemId.value = null;
+    }
+  };
+
   return {
     budgets,
     isLoading,
@@ -36,5 +138,11 @@ export function useBudgets() {
     fetchBudgets,
     createBudget,
     addBudgetItem,
+    updateBudget,
+    deleteBudget,
+    updateBudgetItem,
+    deleteBudgetItem,
+    mutatingBudgetId,
+    mutatingBudgetItemId,
   };
 }

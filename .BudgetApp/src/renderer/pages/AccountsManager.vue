@@ -20,7 +20,7 @@
 
       <div class="accounts-layout">
         <form class="account-form" @submit.prevent="handleSubmit">
-          <h3>Nouveau compte</h3>
+          <h3>{{ isEditingAccount ? "Modifier le compte" : "Nouveau compte" }}</h3>
           <label>
             Nom du compte
             <input v-model="form.name" type="text" placeholder="Compte courant" required />
@@ -48,9 +48,31 @@
               required
             />
           </label>
-          <button type="submit" :disabled="isCreating">
-            {{ isCreating ? "Création..." : "Créer le compte" }}
-          </button>
+          <label class="checkbox">
+            <input type="checkbox" v-model="form.isArchived" />
+            <span>Archiver ce compte</span>
+          </label>
+          <div class="form-actions">
+            <button type="submit" :disabled="accountFormSubmitting">
+              {{
+                accountFormSubmitting
+                  ? isEditingAccount
+                    ? "Mise à jour..."
+                    : "Création..."
+                  : isEditingAccount
+                    ? "Mettre à jour le compte"
+                    : "Créer le compte"
+              }}
+            </button>
+            <button
+              v-if="isEditingAccount"
+              type="button"
+              class="ghost"
+              @click="cancelAccountEdit"
+            >
+              Annuler
+            </button>
+          </div>
           <p v-if="formError" class="form-error">{{ formError }}</p>
           <p v-if="formSuccess" class="form-success">{{ formSuccess }}</p>
         </form>
@@ -92,6 +114,24 @@
                   Créé le {{ formatDate(account.createdAt) }}
                   <span v-if="account.isArchived" class="archived">Archivé</span>
                 </p>
+                <div class="card-actions">
+                  <button
+                    class="ghost"
+                    type="button"
+                    :disabled="updatingAccountId === account.id"
+                    @click.stop="startAccountEdit(account)"
+                  >
+                    {{ updatingAccountId === account.id ? "..." : "Modifier" }}
+                  </button>
+                  <button
+                    class="danger"
+                    type="button"
+                    :disabled="deletingAccountId === account.id"
+                    @click.stop="handleDeleteAccount(account)"
+                  >
+                    {{ deletingAccountId === account.id ? "..." : "Supprimer" }}
+                  </button>
+                </div>
               </li>
             </ul>
           </div>
@@ -107,6 +147,7 @@
             </header>
 
             <form class="transaction-form" @submit.prevent="handleTransactionSubmit">
+              <h4>{{ isEditingTransaction ? "Modifier la transaction" : "Nouvelle transaction" }}</h4>
               <label>
                 Type
                 <select v-model="transactionForm.type">
@@ -153,9 +194,27 @@
                 Description
                 <input v-model="transactionForm.description" type="text" placeholder="Note facultative" />
               </label>
-              <button type="submit" :disabled="transactionsCreating">
-                {{ transactionsCreating ? "Ajout..." : "Ajouter la transaction" }}
-              </button>
+              <div class="form-actions">
+                <button type="submit" :disabled="transactionFormSubmitting">
+                  {{
+                    transactionFormSubmitting
+                      ? isEditingTransaction
+                        ? "Mise à jour..."
+                        : "Ajout..."
+                      : isEditingTransaction
+                        ? "Mettre à jour la transaction"
+                        : "Ajouter la transaction"
+                  }}
+                </button>
+                <button
+                  v-if="isEditingTransaction"
+                  type="button"
+                  class="ghost"
+                  @click="cancelTransactionEdit"
+                >
+                  Annuler
+                </button>
+              </div>
               <p v-if="transactionError" class="form-error">{{ transactionError }}</p>
               <p v-if="transactionSuccess" class="form-success">{{ transactionSuccess }}</p>
             </form>
@@ -183,6 +242,24 @@
                     {{ formatTransactionDate(transaction.txnDate) }}
                     <span v-if="transaction.description">• {{ transaction.description }}</span>
                   </p>
+                  <div class="transaction-actions">
+                    <button
+                      class="ghost"
+                      type="button"
+                      :disabled="updatingTransactionId === transaction.id"
+                      @click="startTransactionEdit(transaction)"
+                    >
+                      {{ updatingTransactionId === transaction.id ? "..." : "Modifier" }}
+                    </button>
+                    <button
+                      class="danger"
+                      type="button"
+                      :disabled="deletingTransactionId === transaction.id"
+                      @click="handleTransactionDelete(transaction)"
+                    >
+                      {{ deletingTransactionId === transaction.id ? "..." : "Supprimer" }}
+                    </button>
+                  </div>
                 </li>
               </ul>
             </div>
@@ -200,15 +277,26 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { ACCOUNT_TYPES, type AccountType } from "src/shared/account";
-import type { TransactionType } from "src/shared/transaction";
+import { ACCOUNT_TYPES, type Account, type AccountType } from "src/shared/account";
+import type { Transaction, TransactionType } from "src/shared/transaction";
 import { useAuth } from "../composables/auth";
 import { useAccounts } from "../composables/accounts";
 import { useTransactions } from "../composables/transactions";
 import { useCategories } from "../composables/categories";
 
 const { currentUser } = useAuth();
-const { accounts, isFetching, isCreating, lastError, fetchAccounts, createAccount } = useAccounts();
+const {
+  accounts,
+  isFetching,
+  isCreating,
+  lastError,
+  fetchAccounts,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+  updatingAccountId,
+  deletingAccountId,
+} = useAccounts();
 const {
   transactions,
   isLoading: transactionsLoading,
@@ -216,6 +304,10 @@ const {
   lastError: transactionsError,
   fetchTransactions,
   createTransaction,
+  updateTransaction,
+  deleteTransaction,
+  updatingTransactionId,
+  deletingTransactionId,
 } = useTransactions();
 const {
   categories: categoryList,
@@ -231,12 +323,29 @@ const form = reactive({
   type: accountTypes[0],
   currency: "EUR",
   initialBalance: 0,
+  isArchived: false,
 });
 
 const formError = ref<string | null>(null);
 const formSuccess = ref<string | null>(null);
 const transactionError = ref<string | null>(null);
 const transactionSuccess = ref<string | null>(null);
+const editingAccountId = ref<number | null>(null);
+const isEditingAccount = computed(() => editingAccountId.value !== null);
+const accountFormSubmitting = computed(() =>
+  isEditingAccount.value
+    ? updatingAccountId.value === editingAccountId.value
+    : isCreating.value,
+);
+const editingTransactionId = ref<number | null>(null);
+const isEditingTransaction = computed(
+  () => editingTransactionId.value !== null,
+);
+const transactionFormSubmitting = computed(() =>
+  isEditingTransaction.value
+    ? updatingTransactionId.value === editingTransactionId.value
+    : transactionsCreating.value,
+);
 
 const sanitizedCurrency = computed(() => form.currency.trim().toUpperCase().slice(0, 3));
 const selectedAccountId = ref<number | null>(null);
@@ -251,6 +360,22 @@ const transactionForm = reactive({
   description: "",
   categoryId: null as number | null,
 });
+
+const resetForm = () => {
+  form.name = "";
+  form.type = accountTypes[0];
+  form.currency = currentUser.value?.defaultCurrency ?? "EUR";
+  form.initialBalance = 0;
+  form.isArchived = false;
+};
+
+const resetTransactionForm = () => {
+  transactionForm.type = "EXPENSE";
+  transactionForm.amount = 0;
+  transactionForm.txnDate = new Date().toISOString().split("T")[0];
+  transactionForm.description = "";
+  transactionForm.categoryId = null;
+};
 
 const transactionCategoryOptions = computed(() =>
   categoryList.value.filter((category) => category.kind === transactionForm.type),
@@ -291,12 +416,22 @@ watch(
   (list) => {
     if (!list.length) {
       selectedAccountId.value = null;
+      editingAccountId.value = null;
+      resetForm();
       return;
     }
 
     const selectionStillValid = list.some((account) => account.id === selectedAccountId.value);
     if (!selectionStillValid) {
       selectedAccountId.value = null;
+    }
+
+    if (
+      editingAccountId.value &&
+      !list.some((account) => account.id === editingAccountId.value)
+    ) {
+      editingAccountId.value = null;
+      resetForm();
     }
   },
   { immediate: true },
@@ -310,6 +445,8 @@ watch(
       categoryList.value = [];
       selectedAccountId.value = null;
       transactions.value = [];
+      editingAccountId.value = null;
+      resetForm();
       return;
     }
 
@@ -330,23 +467,26 @@ watch(
     } else {
       transactions.value = [];
     }
+    editingTransactionId.value = null;
+    resetTransactionForm();
   },
   { immediate: true },
 );
 
-const resetForm = () => {
-  form.name = "";
-  form.type = accountTypes[0];
-  form.currency = currentUser.value?.defaultCurrency ?? "EUR";
-  form.initialBalance = 0;
+const startTransactionEdit = (transaction: Transaction) => {
+  editingTransactionId.value = transaction.id;
+  transactionForm.type = transaction.type;
+  transactionForm.amount = transaction.amount;
+  transactionForm.txnDate = transaction.txnDate.split("T")[0];
+  transactionForm.description = transaction.description ?? "";
+  transactionForm.categoryId = transaction.categoryId ?? null;
+  transactionError.value = null;
+  transactionSuccess.value = null;
 };
 
-const resetTransactionForm = () => {
-  transactionForm.type = "EXPENSE";
-  transactionForm.amount = 0;
-  transactionForm.txnDate = new Date().toISOString().split("T")[0];
-  transactionForm.description = "";
-  transactionForm.categoryId = null;
+const cancelTransactionEdit = () => {
+  editingTransactionId.value = null;
+  resetTransactionForm();
 };
 
 watch(
@@ -363,32 +503,104 @@ watch(
   },
 );
 
+const startAccountEdit = (account: Account) => {
+  editingAccountId.value = account.id;
+  form.name = account.name;
+  form.type = account.type;
+  form.currency = account.currency;
+  form.initialBalance = account.initialBalance;
+  form.isArchived = account.isArchived;
+  formError.value = null;
+  formSuccess.value = null;
+};
+
+const cancelAccountEdit = () => {
+  editingAccountId.value = null;
+  resetForm();
+};
+
 const handleSubmit = async () => {
   if (!currentUser.value) {
-    formError.value = "Vous devez être connecté pour créer un compte.";
+    formError.value = "Vous devez être connecté pour gérer vos comptes.";
+    return;
+  }
+
+  const trimmedName = form.name.trim();
+
+  if (!trimmedName) {
+    formError.value = "Le nom du compte est requis.";
     return;
   }
 
   formError.value = null;
   formSuccess.value = null;
-  const createdName = form.name;
+
+  const basePayload = {
+    userId: currentUser.value.id,
+    name: trimmedName,
+    type: form.type,
+    currency: sanitizedCurrency.value || "EUR",
+    initialBalance: form.initialBalance,
+    isArchived: form.isArchived,
+  };
 
   try {
-    await createAccount({
-      userId: currentUser.value.id,
-      name: form.name,
-      type: form.type,
-      currency: sanitizedCurrency.value || "EUR",
-      initialBalance: form.initialBalance,
-    });
-
-    formSuccess.value = `Compte "${createdName}" créé avec succès.`;
-    resetForm();
+    if (editingAccountId.value) {
+      await updateAccount({
+        id: editingAccountId.value,
+        ...basePayload,
+      });
+      formSuccess.value = `Compte "${trimmedName}" mis à jour avec succès.`;
+      selectedAccountId.value = editingAccountId.value;
+      cancelAccountEdit();
+    } else {
+      const account = await createAccount(basePayload);
+      formSuccess.value = `Compte "${trimmedName}" créé avec succès.`;
+      resetForm();
+      if (account?.id) {
+        selectedAccountId.value = account.id;
+      }
+    }
   } catch (error) {
     if (error instanceof Error) {
       formError.value = error.message;
     } else {
-      formError.value = "Création impossible pour le moment.";
+      formError.value = "Opération impossible pour le moment.";
+    }
+  }
+};
+
+const handleDeleteAccount = async (account: Account) => {
+  if (!currentUser.value) {
+    formError.value = "Vous devez être connecté pour gérer vos comptes.";
+    return;
+  }
+
+  if (
+    !confirm(
+      `Supprimer le compte "${account.name}" ? Cette action est irréversible.`,
+    )
+  ) {
+    return;
+  }
+
+  formError.value = null;
+  formSuccess.value = null;
+
+  try {
+    await deleteAccount(account.id);
+    if (selectedAccountId.value === account.id) {
+      selectedAccountId.value = null;
+    }
+    if (editingAccountId.value === account.id) {
+      cancelAccountEdit();
+    }
+    formSuccess.value = `Compte "${account.name}" supprimé.`;
+  } catch (error) {
+    if (error instanceof Error) {
+      formError.value = error.message;
+    } else {
+      formError.value = "Suppression impossible pour le moment.";
     }
   }
 };
@@ -401,6 +613,9 @@ const selectAccount = (accountId: number) => {
   selectedAccountId.value = accountId;
   transactionError.value = null;
   transactionSuccess.value = null;
+  if (editingAccountId.value && editingAccountId.value !== accountId) {
+    cancelAccountEdit();
+  }
 };
 
 const handleTransactionSubmit = async () => {
@@ -412,20 +627,29 @@ const handleTransactionSubmit = async () => {
   transactionError.value = null;
   transactionSuccess.value = null;
   const previousAccountId = selectedAccountId.value;
+  const payload = {
+    userId: currentUser.value.id,
+    accountId: selectedAccount.value.id,
+    type: transactionForm.type,
+    categoryId: transactionForm.categoryId ?? undefined,
+    amount: transactionForm.amount,
+    txnDate: transactionForm.txnDate,
+    description: transactionForm.description || undefined,
+  };
 
   try {
-    await createTransaction({
-      userId: currentUser.value.id,
-      accountId: selectedAccount.value.id,
-      type: transactionForm.type,
-      categoryId: transactionForm.categoryId ?? undefined,
-      amount: transactionForm.amount,
-      txnDate: transactionForm.txnDate,
-      description: transactionForm.description || undefined,
-    });
-
-    transactionSuccess.value = "Transaction ajoutée avec succès.";
-    resetTransactionForm();
+    if (editingTransactionId.value) {
+      await updateTransaction({
+        id: editingTransactionId.value,
+        ...payload,
+      });
+      transactionSuccess.value = "Transaction mise à jour.";
+      cancelTransactionEdit();
+    } else {
+      await createTransaction(payload);
+      transactionSuccess.value = "Transaction ajoutée avec succès.";
+      resetTransactionForm();
+    }
 
     await fetchAccounts(currentUser.value.id);
     if (previousAccountId) {
@@ -436,6 +660,37 @@ const handleTransactionSubmit = async () => {
       transactionError.value = error.message;
     } else {
       transactionError.value = "Ajout impossible pour le moment.";
+    }
+  }
+};
+
+const handleTransactionDelete = async (transaction: Transaction) => {
+  if (!currentUser.value || !selectedAccount.value) {
+    transactionError.value = "Authentifiez-vous et sélectionnez un compte.";
+    return;
+  }
+
+  if (
+    !confirm("Supprimer cette transaction ? Le solde du compte sera ajusté.")
+  ) {
+    return;
+  }
+
+  transactionError.value = null;
+  transactionSuccess.value = null;
+
+  try {
+    await deleteTransaction(transaction.id);
+    if (editingTransactionId.value === transaction.id) {
+      cancelTransactionEdit();
+    }
+    transactionSuccess.value = "Transaction supprimée.";
+    await fetchAccounts(currentUser.value.id);
+  } catch (error) {
+    if (error instanceof Error) {
+      transactionError.value = error.message;
+    } else {
+      transactionError.value = "Suppression impossible pour le moment.";
     }
   }
 };
@@ -604,6 +859,42 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.checkbox input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #38bdf8;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ghost,
+.danger {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: transparent;
+  color: #e2e8f0;
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  margin-top: 0;
+}
+
+.danger {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
 .form-error,
 .list-error {
   background: rgba(248, 113, 113, 0.12);
@@ -721,6 +1012,13 @@ button:disabled {
 .archived {
   margin-left: 0.5rem;
   color: #fbbf24;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
 }
 
 .transactions-panel {
@@ -845,6 +1143,13 @@ button:disabled {
   font-size: 0.85rem;
   color: rgba(226, 232, 240, 0.75);
   margin-top: 0.35rem;
+}
+
+.transaction-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 960px) {

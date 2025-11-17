@@ -1,10 +1,16 @@
 import { ref } from "vue";
-import type { Category, CreateCategoryInput } from "src/shared/category";
+import type {
+  Category,
+  CreateCategoryInput,
+  UpdateCategoryInput,
+} from "src/shared/category";
 
 const categories = ref<Category[]>([]);
 const isFetching = ref(false);
 const isCreating = ref(false);
 const lastError = ref<string | null>(null);
+const updatingCategoryId = ref<number | null>(null);
+const deletingCategoryId = ref<number | null>(null);
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) {
@@ -57,6 +63,47 @@ export function useCategories() {
     }
   };
 
+  const updateCategory = async (payload: UpdateCategoryInput) => {
+    try {
+      updatingCategoryId.value = payload.id;
+      const category = await window.electronService.categories.update(payload);
+      categories.value = categories.value.map((item) =>
+        item.id === category.id ? category : item,
+      );
+      lastError.value = null;
+      return category;
+    } catch (error) {
+      console.error("Unable to update category", error);
+      lastError.value = getErrorMessage(
+        error,
+        "Impossible de mettre à jour la catégorie.",
+      );
+      throw error;
+    } finally {
+      updatingCategoryId.value = null;
+    }
+  };
+
+  const deleteCategory = async (categoryId: number) => {
+    try {
+      deletingCategoryId.value = categoryId;
+      await window.electronService.categories.delete(categoryId);
+      categories.value = categories.value.filter(
+        (category) => category.id !== categoryId,
+      );
+      lastError.value = null;
+    } catch (error) {
+      console.error("Unable to delete category", error);
+      lastError.value = getErrorMessage(
+        error,
+        "Impossible de supprimer la catégorie.",
+      );
+      throw error;
+    } finally {
+      deletingCategoryId.value = null;
+    }
+  };
+
   return {
     categories,
     isFetching,
@@ -64,5 +111,9 @@ export function useCategories() {
     lastError,
     fetchCategories,
     createCategory,
+    updateCategory,
+    deleteCategory,
+    updatingCategoryId,
+    deletingCategoryId,
   };
 }

@@ -1,6 +1,9 @@
 import { ipcMain } from "electron";
 import { CategoryRepository } from "./categoryRepository";
-import type { CreateCategoryInput } from "src/shared/category";
+import type {
+  CreateCategoryInput,
+  UpdateCategoryInput,
+} from "src/shared/category";
 
 let repositoryInstance: CategoryRepository | null = null;
 
@@ -19,5 +22,13 @@ export function registerCategoryRepository() {
 
   ipcMain.handle("categoryRepository:create", (_event, payload: CreateCategoryInput) =>
     getRepository().create(payload),
+  );
+
+  ipcMain.handle("categoryRepository:update", (_event, payload: UpdateCategoryInput) =>
+    getRepository().update(payload),
+  );
+
+  ipcMain.handle("categoryRepository:delete", (_event, categoryId: number) =>
+    getRepository().delete(categoryId),
   );
 }

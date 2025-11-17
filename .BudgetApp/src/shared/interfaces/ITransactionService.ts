@@ -1,6 +1,7 @@
 import type {
   CreateTransactionInput,
   Transaction,
+  UpdateTransactionInput,
 } from "../transaction";
 
 export default interface ITransactionService {
@@ -9,4 +10,6 @@ export default interface ITransactionService {
     accountId: number;
   }) => Promise<Transaction[]>;
   create: (payload: CreateTransactionInput) => Promise<Transaction>;
+  update: (payload: UpdateTransactionInput) => Promise<Transaction>;
+  delete: (transactionId: number) => Promise<void>;
 }

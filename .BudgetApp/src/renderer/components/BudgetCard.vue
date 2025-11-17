@@ -9,13 +9,57 @@
         <span class="label">Planifié</span>
         <strong class="amount">{{ formattedTotal }}</strong>
       </div>
+      <div class="card-actions">
+        <button
+          class="ghost"
+          type="button"
+          :disabled="isBudgetBusy"
+          @click="toggleEditBudget"
+        >
+          {{ isEditingBudget ? "Annuler" : "Modifier" }}
+        </button>
+        <button
+          class="danger"
+          type="button"
+          :disabled="isBudgetBusy"
+          @click="requestDeleteBudget"
+        >
+          {{ isBudgetBusy ? "Suppression..." : "Supprimer" }}
+        </button>
+      </div>
     </header>
+
+    <form
+      v-if="isEditingBudget"
+      class="budget-meta-form"
+      @submit.prevent="handleBudgetUpdate"
+    >
+      <label>
+        Année
+        <input type="number" min="2000" v-model.number="editingYear" required />
+      </label>
+      <label>
+        Mois
+        <input type="number" min="1" max="12" v-model.number="editingMonth" required />
+      </label>
+      <div class="meta-actions">
+        <button type="button" class="ghost" @click="cancelBudgetEdition">
+          Fermer
+        </button>
+        <button type="submit" :disabled="isBudgetBusy">
+          {{ isBudgetBusy ? "Enregistrement..." : "Enregistrer" }}
+        </button>
+      </div>
+    </form>
 
     <ul class="items-list">
       <BudgetItemRow
         v-for="item in props.budget.items"
         :key="`${props.budget.id}-${item.id ?? item.categoryId}`"
         :item="item"
+        :is-busy="props.mutatingItemId === item.id"
+        @update="(payload) => emit('update-item', payload)"
+        @delete="(itemId) => emit('delete-item', itemId)"
       />
       <li v-if="!props.budget.items.length" class="empty-state">
         Aucun poste budgétaire pour ce mois.
@@ -45,11 +89,13 @@
 
 <script setup lang="ts">
 import type { Budget } from "src/shared/budget";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import BudgetItemRow from "./BudgetItemRow.vue";
 
 const props = defineProps<{
   budget: Budget;
+  mutatingBudgetId: number | null;
+  mutatingItemId: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -60,10 +106,43 @@ const emit = defineEmits<{
       amount: number;
     },
   ): void;
+  (
+    e: "update-budget",
+    payload: {
+      year: number;
+      month: number;
+    },
+  ): void;
+  (e: "delete-budget"): void;
+  (
+    e: "update-item",
+    payload: {
+      itemId?: number;
+      categoryId: number;
+      amount: number;
+    },
+  ): void;
+  (e: "delete-item", itemId?: number): void;
 }>();
 
 const categoryId = ref<number | null>(null);
 const amount = ref<number | null>(null);
+const isEditingBudget = ref(false);
+const editingYear = ref(props.budget.year);
+const editingMonth = ref(props.budget.month);
+
+watch(
+  () => props.budget,
+  (budget) => {
+    editingYear.value = budget.year;
+    editingMonth.value = budget.month;
+  },
+  { deep: true },
+);
+
+const isBudgetBusy = computed(
+  () => props.mutatingBudgetId === props.budget.id,
+);
 
 const monthLabel = computed(() =>
   new Date(props.budget.year, props.budget.month - 1, 1).toLocaleString(
@@ -103,6 +182,35 @@ const handleAddItem = () => {
   categoryId.value = null;
   amount.value = null;
 };
+
+const toggleEditBudget = () => {
+  isEditingBudget.value = !isEditingBudget.value;
+};
+
+const cancelBudgetEdition = () => {
+  editingYear.value = props.budget.year;
+  editingMonth.value = props.budget.month;
+  isEditingBudget.value = false;
+};
+
+const handleBudgetUpdate = () => {
+  emit("update-budget", {
+    year: editingYear.value,
+    month: editingMonth.value,
+  });
+  isEditingBudget.value = false;
+};
+
+const requestDeleteBudget = () => {
+  if (
+    confirm(
+      "Voulez-vous vraiment supprimer ce budget ? Cette action est irréversible.",
+    )
+  ) {
+    emit("delete-budget");
+    isEditingBudget.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -120,7 +228,9 @@ const handleAddItem = () => {
 .budget-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .period {
@@ -150,6 +260,63 @@ const handleAddItem = () => {
 .amount {
   display: block;
   font-size: 1.5rem;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.budget-meta-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+}
+
+.budget-meta-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: rgba(226, 232, 240, 0.85);
+}
+
+.budget-meta-form input {
+  border-radius: 0.4rem;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.45rem 0.6rem;
+  color: #f8fafc;
+}
+
+.meta-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.ghost,
+.danger {
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: transparent;
+  padding: 0.4rem 0.9rem;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.danger {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .items-list {

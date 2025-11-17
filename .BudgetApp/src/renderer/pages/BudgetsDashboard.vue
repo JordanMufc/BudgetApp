@@ -15,7 +15,13 @@
         v-for="budget in budgets"
         :key="budget.id"
         :budget="budget"
+        :mutating-budget-id="mutatingBudgetId"
+        :mutating-item-id="mutatingBudgetItemId"
         @add-item="(payload) => handleAddItem(budget.id, payload)"
+        @update-budget="(payload) => handleUpdateBudget(budget.id, payload)"
+        @delete-budget="() => handleDeleteBudget(budget.id)"
+        @update-item="(payload) => handleUpdateBudgetItem(budget.id, payload)"
+        @delete-item="(itemId) => handleDeleteBudgetItem(budget.id, itemId)"
       />
     </div>
 
@@ -33,8 +39,19 @@ import BudgetCard from "../components/BudgetCard.vue";
 import AddBudgetButton from "../components/AddBudgetButton.vue";
 import { useBudgets } from "../composables/budgets";
 
-const { budgets, fetchBudgets, addBudgetItem, isLoading, lastError } =
-  useBudgets();
+const {
+  budgets,
+  fetchBudgets,
+  addBudgetItem,
+  updateBudget,
+  deleteBudget,
+  updateBudgetItem,
+  deleteBudgetItem,
+  isLoading,
+  lastError,
+  mutatingBudgetId,
+  mutatingBudgetItemId,
+} = useBudgets();
 
 onMounted(() => {
   fetchBudgets();
@@ -54,6 +71,56 @@ const handleAddItem = async (
   };
 
   await addBudgetItem(budgetId, item);
+};
+
+const handleUpdateBudget = async (
+  budgetId: number | undefined,
+  payload: { year: number; month: number },
+) => {
+  if (!budgetId) {
+    return;
+  }
+
+  await updateBudget({
+    id: budgetId,
+    year: payload.year,
+    month: payload.month,
+  });
+};
+
+const handleDeleteBudget = async (budgetId: number | undefined) => {
+  if (!budgetId) {
+    return;
+  }
+
+  await deleteBudget(budgetId);
+};
+
+const handleUpdateBudgetItem = async (
+  budgetId: number | undefined,
+  payload: { itemId?: number; categoryId: number; amount: number },
+) => {
+  if (!budgetId || !payload.itemId) {
+    return;
+  }
+
+  await updateBudgetItem({
+    id: payload.itemId,
+    budgetId,
+    categoryId: payload.categoryId,
+    amount: payload.amount,
+  });
+};
+
+const handleDeleteBudgetItem = async (
+  budgetId: number | undefined,
+  itemId?: number,
+) => {
+  if (!budgetId || !itemId) {
+    return;
+  }
+
+  await deleteBudgetItem({ id: itemId, budgetId });
 };
 </script>
 

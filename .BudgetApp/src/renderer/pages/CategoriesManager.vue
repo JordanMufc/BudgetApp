@@ -20,7 +20,7 @@
 
       <div class="categories-layout">
         <form class="category-form" @submit.prevent="handleSubmit">
-          <h3>Nouvelle catégorie</h3>
+          <h3>{{ isEditingCategory ? "Modifier la catégorie" : "Nouvelle catégorie" }}</h3>
           <label>
             Nom de la catégorie
             <input v-model="form.name" type="text" placeholder="Courses, Salaire..." required />
@@ -41,9 +41,27 @@
               </option>
             </select>
           </label>
-          <button type="submit" :disabled="isCreating">
-            {{ isCreating ? "Création..." : "Créer la catégorie" }}
-          </button>
+          <div class="form-actions">
+            <button type="submit" :disabled="categoryFormSubmitting">
+              {{
+                categoryFormSubmitting
+                  ? isEditingCategory
+                    ? "Mise à jour..."
+                    : "Création..."
+                  : isEditingCategory
+                    ? "Mettre à jour la catégorie"
+                    : "Créer la catégorie"
+              }}
+            </button>
+            <button
+              v-if="isEditingCategory"
+              type="button"
+              class="ghost"
+              @click="cancelCategoryEdit"
+            >
+              Annuler
+            </button>
+          </div>
           <p v-if="formError" class="form-error">{{ formError }}</p>
           <p v-if="formSuccess" class="form-success">{{ formSuccess }}</p>
         </form>
@@ -74,6 +92,24 @@
                       {{ formatDate(category.createdAt) }}
                     </p>
                   </div>
+                  <div class="category-actions">
+                    <button
+                      class="ghost"
+                      type="button"
+                      :disabled="updatingCategoryId === category.id"
+                      @click="startCategoryEdit(category)"
+                    >
+                      {{ updatingCategoryId === category.id ? "..." : "Modifier" }}
+                    </button>
+                    <button
+                      class="danger"
+                      type="button"
+                      :disabled="deletingCategoryId === category.id"
+                      @click="handleDeleteCategory(category)"
+                    >
+                      {{ deletingCategoryId === category.id ? "..." : "Supprimer" }}
+                    </button>
+                  </div>
                 </li>
               </ul>
             </article>
@@ -92,6 +128,24 @@
                       {{ formatDate(category.createdAt) }}
                     </p>
                   </div>
+                  <div class="category-actions">
+                    <button
+                      class="ghost"
+                      type="button"
+                      :disabled="updatingCategoryId === category.id"
+                      @click="startCategoryEdit(category)"
+                    >
+                      {{ updatingCategoryId === category.id ? "..." : "Modifier" }}
+                    </button>
+                    <button
+                      class="danger"
+                      type="button"
+                      :disabled="deletingCategoryId === category.id"
+                      @click="handleDeleteCategory(category)"
+                    >
+                      {{ deletingCategoryId === category.id ? "..." : "Supprimer" }}
+                    </button>
+                  </div>
                 </li>
               </ul>
             </article>
@@ -105,13 +159,23 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import type { CategoryKind } from "src/shared/category";
+import type { Category, CategoryKind } from "src/shared/category";
 import { useAuth } from "../composables/auth";
 import { useCategories } from "../composables/categories";
 
 const { currentUser } = useAuth();
-const { categories, isFetching, isCreating, lastError, fetchCategories, createCategory } =
-  useCategories();
+const {
+  categories,
+  isFetching,
+  isCreating,
+  lastError,
+  fetchCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  updatingCategoryId,
+  deletingCategoryId,
+} = useCategories();
 
 const form = reactive({
   name: "",
@@ -121,8 +185,21 @@ const form = reactive({
 
 const formError = ref<string | null>(null);
 const formSuccess = ref<string | null>(null);
+const editingCategoryId = ref<number | null>(null);
+const isEditingCategory = computed(() => editingCategoryId.value !== null);
+const categoryFormSubmitting = computed(() =>
+  isEditingCategory.value
+    ? updatingCategoryId.value === editingCategoryId.value
+    : isCreating.value,
+);
 
-const parentOptions = computed(() => categories.value.filter((category) => category.kind === form.kind));
+const parentOptions = computed(() =>
+  categories.value.filter(
+    (category) =>
+      category.kind === form.kind &&
+      category.id !== editingCategoryId.value,
+  ),
+);
 const expenseCategories = computed(() => categories.value.filter((category) => category.kind === "EXPENSE"));
 const incomeCategories = computed(() => categories.value.filter((category) => category.kind === "INCOME"));
 
@@ -166,6 +243,8 @@ watch(
     if (!newId) {
       categories.value = [];
       form.parentId = null;
+      editingCategoryId.value = null;
+      resetForm();
       return;
     }
 
@@ -184,6 +263,47 @@ watch(
   },
 );
 
+const startCategoryEdit = (category: Category) => {
+  editingCategoryId.value = category.id;
+  form.name = category.name;
+  form.kind = category.kind;
+  form.parentId = category.parentId ?? null;
+  formError.value = null;
+  formSuccess.value = null;
+};
+
+const cancelCategoryEdit = () => {
+  editingCategoryId.value = null;
+  resetForm();
+};
+
+const handleDeleteCategory = async (category: Category) => {
+  if (
+    !confirm(
+      `Supprimer la catégorie "${category.name}" ? Cette action est irréversible.`,
+    )
+  ) {
+    return;
+  }
+
+  formError.value = null;
+  formSuccess.value = null;
+
+  try {
+    await deleteCategory(category.id);
+    if (editingCategoryId.value === category.id) {
+      cancelCategoryEdit();
+    }
+    formSuccess.value = `Catégorie "${category.name}" supprimée.`;
+  } catch (error) {
+    if (error instanceof Error) {
+      formError.value = error.message;
+    } else {
+      formError.value = "Suppression impossible pour le moment.";
+    }
+  }
+};
+
 const handleSubmit = async () => {
   if (!currentUser.value) {
     formError.value = "Vous devez être connecté pour créer une catégorie.";
@@ -200,20 +320,30 @@ const handleSubmit = async () => {
   const createdName = form.name.trim();
 
   try {
-    await createCategory({
+    const payload = {
       userId: currentUser.value.id,
       name: createdName,
       kind: form.kind,
       parentId: form.parentId ?? undefined,
-    });
+    };
 
-    formSuccess.value = `Catégorie "${createdName}" créée avec succès.`;
-    resetForm();
+    if (editingCategoryId.value) {
+      await updateCategory({
+        id: editingCategoryId.value,
+        ...payload,
+      });
+      formSuccess.value = `Catégorie "${createdName}" mise à jour.`;
+      cancelCategoryEdit();
+    } else {
+      await createCategory(payload);
+      formSuccess.value = `Catégorie "${createdName}" créée avec succès.`;
+      resetForm();
+    }
   } catch (error) {
     if (error instanceof Error) {
       formError.value = error.message;
     } else {
-      formError.value = "Création impossible pour le moment.";
+      formError.value = "Opération impossible pour le moment.";
     }
   }
 };
@@ -334,6 +464,29 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ghost,
+.danger {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: transparent;
+  color: #e2e8f0;
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  margin-top: 0;
+}
+
+.danger {
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
 .form-error {
   color: #f87171;
   font-size: 0.85rem;
@@ -416,6 +569,16 @@ button:disabled {
   border-radius: 14px;
   padding: 0.75rem 0.9rem;
   background: rgba(15, 23, 42, 0.25);
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.category-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .category-name {

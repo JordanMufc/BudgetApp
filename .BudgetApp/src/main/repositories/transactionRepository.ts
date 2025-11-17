@@ -6,6 +6,7 @@ import {
 import type {
   CreateTransactionInput,
   Transaction,
+  UpdateTransactionInput,
 } from "src/shared/transaction";
 
 export class TransactionRepository {
@@ -67,6 +68,96 @@ export class TransactionRepository {
     });
 
     return this.mapTransaction(transaction);
+  }
+
+  async update(payload: UpdateTransactionInput): Promise<Transaction> {
+    return this.dbclient.$transaction(async (tx) => {
+      const existing = await tx.transactions.findUnique({
+        where: { id: payload.id },
+      });
+
+      if (!existing) {
+        throw new Error("Transaction introuvable.");
+      }
+
+      if (existing.user_id !== payload.userId) {
+        throw new Error("Action non autorisée.");
+      }
+
+      if (existing.account_id !== payload.accountId) {
+        throw new Error("La modification du compte n'est pas prise en charge.");
+      }
+
+      const currentAmount = Number(existing.amount);
+
+      await tx.accounts.update({
+        where: { id: existing.account_id },
+        data:
+          existing.type === "EXPENSE"
+            ? { initial_balance: { increment: currentAmount } }
+            : { initial_balance: { decrement: currentAmount } },
+      });
+
+      const nextType =
+        payload.type ?? (existing.type as Transaction["type"]);
+      const nextAmount =
+        payload.amount !== undefined ? payload.amount : currentAmount;
+      const nextCategoryId =
+        payload.categoryId !== undefined
+          ? payload.categoryId
+          : existing.category_id;
+      const nextDescription =
+        payload.description !== undefined
+          ? payload.description
+          : existing.description;
+
+      const updated = await tx.transactions.update({
+        where: { id: payload.id },
+        data: {
+          type: nextType,
+          amount: nextAmount,
+          category_id: nextCategoryId,
+          txn_date: payload.txnDate
+            ? new Date(payload.txnDate)
+            : undefined,
+          description: nextDescription,
+        },
+      });
+
+      await tx.accounts.update({
+        where: { id: existing.account_id },
+        data:
+          nextType === "EXPENSE"
+            ? { initial_balance: { decrement: nextAmount } }
+            : { initial_balance: { increment: nextAmount } },
+      });
+
+      return this.mapTransaction(updated);
+    });
+  }
+
+  async delete(transactionId: number): Promise<void> {
+    await this.dbclient.$transaction(async (tx) => {
+      const existing = await tx.transactions.findUnique({
+        where: { id: transactionId },
+      });
+
+      if (!existing) {
+        throw new Error("Transaction introuvable.");
+      }
+
+      await tx.accounts.update({
+        where: { id: existing.account_id },
+        data:
+          existing.type === "EXPENSE"
+            ? { initial_balance: { increment: existing.amount } }
+            : { initial_balance: { decrement: existing.amount } },
+      });
+
+      await tx.transactions.delete({
+        where: { id: transactionId },
+      });
+    });
   }
 
   private mapTransaction(record: transactions): Transaction {

@@ -15,3 +15,16 @@ export interface Budget {
   updatedAt?: Date;
   items: BudgetItem[];
 }
+
+export interface UpdateBudgetInput {
+  id: number;
+  year?: number;
+  month?: number;
+}
+
+export interface UpdateBudgetItemInput {
+  id: number;
+  budgetId: number;
+  categoryId: number;
+  amount: number;
+}

@@ -1,6 +1,10 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient, accounts } from "./prisma/generated/client";
-import type { Account, CreateAccountInput } from "src/shared/account";
+import type {
+  Account,
+  CreateAccountInput,
+  UpdateAccountInput,
+} from "src/shared/account";
 
 export class AccountRepository {
   private dbclient: PrismaClient;
@@ -40,6 +44,31 @@ export class AccountRepository {
     });
 
     return this.mapAccount(account);
+  }
+
+  async update(payload: UpdateAccountInput): Promise<Account> {
+    const currency = payload.currency
+      ? payload.currency.trim().toUpperCase().slice(0, 3) || "EUR"
+      : undefined;
+
+    const account = await this.dbclient.accounts.update({
+      where: { id: payload.id },
+      data: {
+        name: payload.name,
+        type: payload.type,
+        currency,
+        initial_balance: payload.initialBalance,
+        is_archived: payload.isArchived,
+      },
+    });
+
+    return this.mapAccount(account);
+  }
+
+  async delete(accountId: number): Promise<void> {
+    await this.dbclient.accounts.delete({
+      where: { id: accountId },
+    });
   }
 
   private mapAccount(record: accounts): Account {

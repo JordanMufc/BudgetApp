@@ -1,6 +1,10 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient, categories } from "./prisma/generated/client";
-import type { Category, CreateCategoryInput } from "src/shared/category";
+import type {
+  Category,
+  CreateCategoryInput,
+  UpdateCategoryInput,
+} from "src/shared/category";
 
 export class CategoryRepository {
   private dbclient: PrismaClient;
@@ -36,6 +40,26 @@ export class CategoryRepository {
     });
 
     return this.mapCategory(category);
+  }
+
+  async update(payload: UpdateCategoryInput): Promise<Category> {
+    const category = await this.dbclient.categories.update({
+      where: { id: payload.id },
+      data: {
+        name: payload.name ?? undefined,
+        kind: payload.kind ?? undefined,
+        parent_id:
+          payload.parentId !== undefined ? payload.parentId : undefined,
+      },
+    });
+
+    return this.mapCategory(category);
+  }
+
+  async delete(categoryId: number): Promise<void> {
+    await this.dbclient.categories.delete({
+      where: { id: categoryId },
+    });
   }
 
   private mapCategory(record: categories): Category {

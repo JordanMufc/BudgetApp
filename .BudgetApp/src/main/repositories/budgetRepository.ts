@@ -1,6 +1,11 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "./prisma/generated/client";
-import { Budget, BudgetItem } from "src/shared/budget";
+import {
+  Budget,
+  BudgetItem,
+  UpdateBudgetInput,
+  UpdateBudgetItemInput,
+} from "src/shared/budget";
 
 export class BudgetRepository {
   private dbclient: PrismaClient;
@@ -78,6 +83,38 @@ export class BudgetRepository {
         category_id: item.categoryId,
         amount: item.amount,
       },
+    });
+  }
+
+  async updateBudget(payload: UpdateBudgetInput): Promise<void> {
+    await this.dbclient.budgets.update({
+      where: { id: payload.id },
+      data: {
+        year: payload.year ?? undefined,
+        month: payload.month ?? undefined,
+      },
+    });
+  }
+
+  async deleteBudget(budgetId: number): Promise<void> {
+    await this.dbclient.budgets.delete({
+      where: { id: budgetId },
+    });
+  }
+
+  async updateBudgetItem(payload: UpdateBudgetItemInput): Promise<void> {
+    await this.dbclient.budget_items.update({
+      where: { id: payload.id },
+      data: {
+        category_id: payload.categoryId,
+        amount: payload.amount,
+      },
+    });
+  }
+
+  async deleteBudgetItem(itemId: number): Promise<void> {
+    await this.dbclient.budget_items.delete({
+      where: { id: itemId },
     });
   }
 }

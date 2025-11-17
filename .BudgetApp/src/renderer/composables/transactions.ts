@@ -2,12 +2,15 @@ import { ref } from "vue";
 import type {
   CreateTransactionInput,
   Transaction,
+  UpdateTransactionInput,
 } from "src/shared/transaction";
 
 const transactions = ref<Transaction[]>([]);
 const isLoading = ref(false);
 const isCreating = ref(false);
 const lastError = ref<string | null>(null);
+const updatingTransactionId = ref<number | null>(null);
+const deletingTransactionId = ref<number | null>(null);
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof Error && error.message) {
@@ -62,6 +65,49 @@ export function useTransactions() {
     }
   };
 
+  const updateTransaction = async (payload: UpdateTransactionInput) => {
+    try {
+      updatingTransactionId.value = payload.id;
+      const transaction = await window.electronService.transactions.update(
+        payload,
+      );
+      transactions.value = transactions.value.map((item) =>
+        item.id === transaction.id ? transaction : item,
+      );
+      lastError.value = null;
+      return transaction;
+    } catch (error) {
+      console.error("Unable to update transaction", error);
+      lastError.value = getErrorMessage(
+        error,
+        "Impossible de mettre à jour la transaction.",
+      );
+      throw error;
+    } finally {
+      updatingTransactionId.value = null;
+    }
+  };
+
+  const deleteTransaction = async (transactionId: number) => {
+    try {
+      deletingTransactionId.value = transactionId;
+      await window.electronService.transactions.delete(transactionId);
+      transactions.value = transactions.value.filter(
+        (transaction) => transaction.id !== transactionId,
+      );
+      lastError.value = null;
+    } catch (error) {
+      console.error("Unable to delete transaction", error);
+      lastError.value = getErrorMessage(
+        error,
+        "Impossible de supprimer la transaction.",
+      );
+      throw error;
+    } finally {
+      deletingTransactionId.value = null;
+    }
+  };
+
   return {
     transactions,
     isLoading,
@@ -69,5 +115,9 @@ export function useTransactions() {
     lastError,
     fetchTransactions,
     createTransaction,
+    updateTransaction,
+    deleteTransaction,
+    updatingTransactionId,
+    deletingTransactionId,
   };
 }
