@@ -3,7 +3,10 @@
     <section class="auth-panel">
       <header class="auth-header">
         <h2>Bienvenue sur BudgetApp</h2>
-        <p>Créez un compte pour suivre vos budgets ou connectez-vous pour continuer.</p>
+        <p>
+          Créez un compte pour suivre vos budgets ou connectez-vous pour
+          continuer.
+        </p>
       </header>
 
       <div class="auth-content">
@@ -11,11 +14,21 @@
           <h3>Se connecter</h3>
           <label>
             Email
-            <input v-model="loginForm.email" type="email" placeholder="jean@exemple.com" required />
+            <input
+              v-model="loginForm.email"
+              type="email"
+              placeholder="jean@exemple.com"
+              required
+            />
           </label>
           <label>
             Mot de passe
-            <input v-model="loginForm.password" type="password" placeholder="••••••••" required />
+            <input
+              v-model="loginForm.password"
+              type="password"
+              placeholder="••••••••"
+              required
+            />
           </label>
           <button type="submit" :disabled="isLoginLoading">
             {{ isLoginLoading ? "Connexion..." : "Connexion" }}
@@ -23,7 +36,9 @@
           <p v-if="loginError" class="form-error">{{ loginError }}</p>
           <p class="secondary-action">
             Pas encore de compte ?
-            <button class="link-button" type="button" @click="openRegister">Créer un compte</button>
+            <button class="link-button" type="button" @click="openRegister">
+              Créer un compte
+            </button>
           </p>
         </form>
 
@@ -34,21 +49,41 @@
         >
           <header>
             <h3>Créer un compte</h3>
-            <button type="button" class="close-button" @click="closeRegister" aria-label="Fermer">
+            <button
+              type="button"
+              class="close-button"
+              @click="closeRegister"
+              aria-label="Fermer"
+            >
               ×
             </button>
           </header>
           <label>
             Nom complet
-            <input v-model="registerForm.name" type="text" placeholder="Jean Dupont" required />
+            <input
+              v-model="registerForm.name"
+              type="text"
+              placeholder="Jean Dupont"
+              required
+            />
           </label>
           <label>
             Email
-            <input v-model="registerForm.email" type="email" placeholder="jean@exemple.com" required />
+            <input
+              v-model="registerForm.email"
+              type="email"
+              placeholder="jean@exemple.com"
+              required
+            />
           </label>
           <label>
             Mot de passe
-            <input v-model="registerForm.password" type="password" placeholder="••••••••" required />
+            <input
+              v-model="registerForm.password"
+              type="password"
+              placeholder="••••••••"
+              required
+            />
           </label>
           <button type="submit" :disabled="isRegisterLoading">
             {{ isRegisterLoading ? "Création..." : "Créer mon compte" }}
@@ -110,7 +145,7 @@ watch(
       void router.replace("/dashboard");
     }
   },
-  { immediate: true },
+  { immediate: true }
 );
 
 const openRegister = () => {
@@ -156,7 +191,7 @@ const handleRegister = async () => {
   } catch (error) {
     registerError.value = getErrorMessage(
       error,
-      "Impossible de créer le compte.",
+      "Impossible de créer le compte."
     );
   } finally {
     isRegisterLoading.value = false;
@@ -183,7 +218,6 @@ const handleLogin = async () => {
     isLoginLoading.value = false;
   }
 };
-
 </script>
 
 <style scoped>
@@ -344,5 +378,4 @@ button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
-
 </style>
