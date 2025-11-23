@@ -1,3 +1,11 @@
-import config from "./vite.main.config.mts";
+import { defineConfig } from "vite";
+import { resolve } from "node:path";
 
-export default config;
+// https://vitejs.dev/config
+export default defineConfig({
+  resolve: {
+    alias: {
+      src: resolve(__dirname, "src"),
+    },
+  },
+});

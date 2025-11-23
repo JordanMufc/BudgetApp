@@ -1,20 +1,17 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-const rootDir = fileURLToPath(new URL(".", import.meta.url));
-const srcDir = path.resolve(rootDir, "src");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // https://vitejs.dev/config
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      src: srcDir,
+      src: resolve(__dirname, "src"),
     },
-  },
-  server: {
-    host: "127.0.0.1",
   },
 });
