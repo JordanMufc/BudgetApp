@@ -1,10 +1,6 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import bcrypt from "bcryptjs";
-import {
-  Prisma,
-  PrismaClient,
-  users,
-} from "./prisma/generated/client";
+import { Prisma, PrismaClient, users } from "./prisma/generated/client";
 import type {
   LoginCredentials,
   RegisterUserInput,
@@ -62,7 +58,7 @@ export class AuthRepository {
 
     const isPasswordValid = await bcrypt.compare(
       payload.password,
-      user.password_hash,
+      user.password_hash
     );
 
     if (!isPasswordValid) {
